@@ -1,0 +1,734 @@
+{
+  "name": "Aposta asset gather",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "evolution-whatsapp-media",
+        "options": {}
+      },
+      "id": "a2807531-3860-46f6-af70-bfb7c3737718",
+      "name": "Webhook (Evolution API)",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        -832,
+        48
+      ],
+      "webhookId": "ea382408-eaa7-494d-a4ed-9aab5f7c899a"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "521ab59b-bb82-43c9-b990-f6d8d66092d8",
+              "leftValue": "={{ String($json.data?.key?.remoteJid || $json.body?.data?.key?.remoteJid || '').trim().endsWith('@g.us') }}",
+              "rightValue": "@g.us",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "03b94b10-6555-443b-a19b-87ee59649482",
+      "name": "IF: Is Group?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -560,
+        48
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "77704580-7be8-45f6-ad98-5a415378d27b",
+              "leftValue": "={{ $json.body?.data?.key?.remoteJid || '' }}",
+              "rightValue": "120363419161996836@g.us",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            },
+            {
+              "id": "e1b83717-3c70-4e3b-9cb9-07f595e8e51a",
+              "leftValue": "={{ $json.body?.data?.key?.remoteJid || '' }}",
+              "rightValue": "120363422006891805@g.us",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            },
+            {
+              "id": "a086e56b-a5af-44a8-9d6f-101b1740959e",
+              "leftValue": "={{ $json.body?.data?.key?.remoteJid || '' }}",
+              "rightValue": "120363405028078411@g.us",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            },
+            {
+              "id": "cb042898-3aeb-4d31-9359-ff876f25f495",
+              "leftValue": "={{ $json.body?.data?.key?.remoteJid || '' }}",
+              "rightValue": "120363404142563929@g.us",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "or"
+        },
+        "options": {}
+      },
+      "id": "bbbfbcd8-e8b9-4562-813d-f1041b345da8",
+      "name": "IF: Allowed Groups",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -304,
+        48
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Evolution API → Normalize media for downstream nodes\n// Outputs: messageType ('image' | 'video' | 'document'), url, base64, fileName, mimetype\n\nconst evo = $json; // full webhook body\nconst root = evo.body?.data || evo.data || {};   // <-- support both shapes\nconst msg  = root.message || {};\n\nlet messageType;\nlet url      = evo.url;        // rarely present at root\nlet base64   = evo.base64;     // rarely present at root\nlet fileName = evo.fileName;\nlet mimetype = evo.mimetype;\n\nconst pick = (...vals) => vals.find(v => v !== undefined && v !== null && v !== '');\n\n// --- Detect media & coerce doc+video/* to 'video'\nif (msg.imageMessage) {\n  const im = msg.imageMessage;\n  messageType = 'image';\n  url      = pick(url, im.url);\n  mimetype = pick(mimetype, im.mimetype, 'image/jpeg');\n  fileName = pick(fileName, im.fileName, 'image.jpg');\n\n} else if (msg.videoMessage) {\n  const vm = msg.videoMessage;\n  messageType = 'video';\n  url      = pick(url, vm.url);\n  mimetype = pick(mimetype, vm.mimetype, 'video/mp4');\n  fileName = pick(fileName, vm.fileName, 'video.mp4');\n\n} else if (msg.documentMessage) {\n  const dm = msg.documentMessage;\n\n  // Coerce to image/video if mimetype says so (video sent as file, etc.)\n  if (dm.mimetype?.startsWith('video/')) {\n    messageType = 'video';\n    url      = pick(url, dm.url);\n    mimetype = pick(mimetype, dm.mimetype, 'video/mp4');\n    fileName = pick(fileName, dm.fileName, 'video.mp4');\n  } else if (dm.mimetype?.startsWith('image/')) {\n    messageType = 'image';\n    url      = pick(url, dm.url);\n    mimetype = pick(mimetype, dm.mimetype, 'image/jpeg');\n    fileName = pick(fileName, dm.fileName, 'image.jpg');\n  } else {\n    messageType = 'document';\n    url      = pick(url, dm.url);\n    mimetype = pick(mimetype, dm.mimetype, 'application/octet-stream');\n    fileName = pick(fileName, dm.fileName, 'file.bin');\n  }\n\n} else {\n  // Fallback from mimetype if no specific message block present\n  if (mimetype?.startsWith('image/')) {\n    messageType = 'image';\n    fileName = fileName || 'image.jpg';\n  } else if (mimetype?.startsWith('video/')) {\n    messageType = 'video';\n    fileName = fileName || 'video.mp4';\n  } else if (mimetype) {\n    messageType = 'document';\n    fileName = fileName || 'file.bin';\n  }\n}\n\nreturn [{\n  json: {\n    ...$json,\n    messageType,\n    url,\n    base64,\n    fileName,\n    mimetype\n  }\n}];\n"
+      },
+      "id": "6d15b0f0-3b5a-4899-9711-d0e40a22baed",
+      "name": "Code: Extract Media",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -48,
+        48
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "29fb1f26-1946-4df8-98fe-1a5ff2b4317a",
+              "leftValue": "={{ (\n$json.body?.imageMessage?.mimetype\n|| $json.body?.data?.message?.imageMessage?.mimetype\n|| $json.data?.message?.imageMessage?.mimetype\n|| $json.body?.documentMessage?.mimetype\n|| $json.data?.message?.documentMessage?.mimetype\n|| ''\n).startsWith('image/').toBoolean() }}",
+              "rightValue": "image",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "e0ce56a4-e7ad-461a-a4b5-43486b36fc7b",
+      "name": "IF: Is Image",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        224,
+        -128
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "1c143bef-d878-4832-9b2f-3a00d4e91155",
+              "leftValue": "={{ \n  (\n    $json.body?.videoMessage?.mimetype \n    || $json.body?.data?.message?.videoMessage?.mimetype \n    || $json.data?.message?.videoMessage?.mimetype \n    || $json.body?.documentMessage?.mimetype \n    || $json.data?.message?.documentMessage?.mimetype \n    || ''\n  ).startsWith('video/')\n}}",
+              "rightValue": "video",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "d8e4c063-2640-4f65-840b-c8a2bf3c3e37",
+      "name": "IF: Is Video",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        224,
+        48
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "f779da79-dd7d-4ec4-a0ce-652a4885526d",
+              "leftValue": "={{ \n  !(\n    (\n      $json.body?.documentMessage?.mimetype \n      || $json.body?.data?.message?.documentMessage?.mimetype \n      || $json.data?.message?.documentMessage?.mimetype \n      || $json.body?.imageMessage?.mimetype \n      || $json.body?.videoMessage?.mimetype \n      || $json.data?.message?.imageMessage?.mimetype \n      || $json.data?.message?.videoMessage?.mimetype \n      || ''\n    ).startsWith('image/')\n  ) \n  || \n  (\n    (\n      $json.body?.documentMessage?.mimetype \n      || $json.body?.data?.message?.documentMessage?.mimetype \n      || $json.data?.message?.documentMessage?.mimetype \n      || $json.body?.imageMessage?.mimetype \n      || $json.body?.videoMessage?.mimetype \n      || $json.data?.message?.imageMessage?.mimetype \n      || $json.data?.message?.videoMessage?.mimetype \n      || ''\n    ).startsWith('video/')\n  )\n}}",
+              "rightValue": "document",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "270244a6-552c-403d-889a-5149f522143a",
+      "name": "IF: Is Document",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        224,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "97563698-e09e-4d01-86f2-a4fe0fd3f7d8",
+              "leftValue": "{{ $json.body?.data?.message?.imageMessage?.mediaKey || '' }}",
+              "rightValue": "true",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "ef2e2a31-3905-43c1-b8d1-88998c84c88d",
+      "name": "IF: Has Base64? (Image)",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        480,
+        -224
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "cbc3e59e-f041-4c9d-806f-d2ef40da10bb",
+              "leftValue": "{{ !!$json.base64 }}",
+              "rightValue": "true",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "364bcc65-8a00-4c25-a6ed-d4bb2bf88204",
+      "name": "IF: Has Base64? (Video)",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        480,
+        16
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "106eabfa-0e5d-420a-93b3-a5355d66a0c6",
+              "leftValue": "={{ !!$json.base64 }}",
+              "rightValue": "true",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "d3c61e39-c95f-4f7a-bd83-a34390069448",
+      "name": "IF: Has Base64? (Document)",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        480,
+        256
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "jsonToBinary",
+        "options": {
+          "fileName": "={{ $json.fileName || 'image.jpg' }}",
+          "mimeType": "={{ $json.mimetype || 'image/jpeg' }}"
+        }
+      },
+      "id": "0762ecc7-287c-4ef3-9850-53f5d5bbbf1c",
+      "name": "Convert: Image (base64→file)",
+      "type": "n8n-nodes-base.moveBinaryData",
+      "typeVersion": 1,
+      "position": [
+        736,
+        -288
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "jsonToBinary",
+        "options": {
+          "fileName": "={{ $json.fileName || 'video.mp4' }}",
+          "mimeType": "={{ $json.mimetype || 'video/mp4' }}"
+        }
+      },
+      "id": "e4bfa8ee-d456-4940-bf18-7d99e63e7e5b",
+      "name": "Convert: Video (base64→file)",
+      "type": "n8n-nodes-base.moveBinaryData",
+      "typeVersion": 1,
+      "position": [
+        752,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "jsonToBinary",
+        "options": {
+          "fileName": "={{ $json.fileName || 'file.bin' }}",
+          "mimeType": "={{ $json.mimetype || 'application/octet-stream' }}"
+        }
+      },
+      "id": "3928d035-2e65-45b2-ae06-6e2f7eb606ad",
+      "name": "Convert: Document (base64→file)",
+      "type": "n8n-nodes-base.moveBinaryData",
+      "typeVersion": 1,
+      "position": [
+        736,
+        208
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.body.data.message.imageMessage.url }}",
+        "responseFormat": "file",
+        "jsonParameters": true,
+        "options": {
+          "followRedirect": false
+        }
+      },
+      "id": "84425a18-8c93-4a2c-99d4-c49e2ca5a6c0",
+      "name": "HTTP: Download From URL",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 2,
+      "position": [
+        736,
+        -160
+      ],
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Prep Drive Meta — per-item, uses $json/$binary (no $input.item())\n\n// 1) grab binary from the current item\nconst bin = $binary?.data;\nif (!bin) {\n  return [{\n    json: {\n      status: 'no binary on input',\n      sawBinaryKeys: Object.keys($binary || {})\n    }\n  }];\n}\n\n// 2) map group → Drive folder\nconst gid = $json.body?.key?.remoteJid || $json.data?.key?.remoteJid || '';\nconst folderMap = {\n  '120363419161996836@g.us': '1lqhYfmEZnbYV-fHFyHImMy9RqdiuT7m6',\n  '120363422006891805@g.us': '18RPD_d9FitZu-L2w9zNL0PNoJky7fWNg',\n  '120363404142563929@g.us': '1h6sNx8dxNnFZKT0YR9fVhZ0Gu-djf-GM',\n};\nconst driveParent = folderMap[gid] || 'FALLBACK_FOLDER_ID';\n\n// 3) build filename\nconst now = new Date();\nconst ymd = now.toISOString().slice(0,10);\nconst srcName = bin.fileName || $json.fileName || 'file';\nconst dot = srcName.lastIndexOf('.');\nconst stem = (dot >= 0 ? srcName.slice(0, dot) : srcName).replace(/[^\\w.-]+/g,'_');\nconst ext  = dot >= 0 ? srcName.slice(dot) : (bin.fileExtension ? '.' + bin.fileExtension : '.bin');\nconst driveName = `${stem}__${ymd}${ext}`;\n\nreturn [{\n  json: {\n    status: 'binary found',\n    gid,\n    driveParent,\n    driveName,\n    driveMime: bin.mimeType || 'application/octet-stream',\n    size: (bin.data || '').length || 0\n  },\n  binary: {\n    // keep the binary under the key \"data\" for Google Drive: Upload\n    data: bin\n  }\n}];"
+      },
+      "id": "1352fcfd-7af5-49f2-a6c9-9ebf8c8b5c65",
+      "name": "Code: Prep Drive Meta",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1008,
+        -112
+      ],
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "name": "={{ $json.driveName }}",
+        "driveId": {
+          "__rl": true,
+          "value": "0AKZcBLfYEbhzUk9PVA",
+          "mode": "id"
+        },
+        "folderId": {
+          "__rl": true,
+          "value": "={{ $json.driveParent }}",
+          "mode": "id"
+        },
+        "options": {
+          "propertiesUi": {
+            "propertyValues": [
+              {
+                "key": "mimeType",
+                "value": "={{ $json.driveMime }}"
+              }
+            ]
+          }
+        }
+      },
+      "id": "7b155f6a-323e-4cdf-a960-6cdc057cf956",
+      "name": "Google Drive: Upload",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        1264,
+        -112
+      ],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "NRIFwDy4rXA5tQ4V",
+          "name": "whatsapp asset"
+        }
+      }
+    }
+  ],
+  "pinData": {
+    "Webhook (Evolution API)": [
+      {
+        "json": {
+          "headers": {
+            "host": "commandcentersu.app.n8n.cloud",
+            "user-agent": "axios/1.10.0",
+            "content-length": "1216",
+            "accept": "application/json, text/plain, */*",
+            "accept-encoding": "gzip, br",
+            "cdn-loop": "cloudflare; loops=1; subreqs=1",
+            "cf-connecting-ip": "159.65.74.32",
+            "cf-ew-via": "15",
+            "cf-ipcountry": "US",
+            "cf-ray": "98a990b63515341c-LAX",
+            "cf-visitor": "{\"scheme\":\"https\"}",
+            "cf-worker": "n8n.cloud",
+            "content-type": "application/json",
+            "x-forwarded-for": "159.65.74.32, 162.158.90.197",
+            "x-forwarded-host": "commandcentersu.app.n8n.cloud",
+            "x-forwarded-port": "443",
+            "x-forwarded-proto": "https",
+            "x-forwarded-server": "traefik-prod-users-gwc-18-7959cfc789-rqqrl",
+            "x-is-trusted": "yes",
+            "x-real-ip": "159.65.74.32"
+          },
+          "params": {},
+          "query": {},
+          "body": {
+            "event": "messages.upsert",
+            "instance": "kiarahannah",
+            "data": {
+              "key": {
+                "remoteJid": "120363404142563929@g.us",
+                "fromMe": false,
+                "id": "3EB0DC37B38063542F9ECED77E94F26871883FDC",
+                "participant": "553899780105@s.whatsapp.net",
+                "participantLid": "16020731379932@lid"
+              },
+              "pushName": "Aposta Premia 3",
+              "status": "DELIVERY_ACK",
+              "message": {
+                "senderKeyDistributionMessage": {
+                  "groupId": "120363404142563929@g.us",
+                  "axolotlSenderKeyDistributionMessage": "MwiBgabKAxAAGiBS2wUrSUthoJRJR7K+NHipA/z54jBEtsXAFZeJNkr9jyIhBVeJfOZqzWgyClxeeIm9/vR+2aPclPyrkSt3aHiy+2YE"
+                },
+                "conversation": "🔥 *COMENZAMOS EN VIVO*🔥\n\n🎁🎁🎁GANA PRAMIOS GANA BANCA APRENDE TODAS LAS ESTRATEGIAS USANDO SOLO EL CELULAR COMO LO HARE YO🎁\n\n👉 Entra ya: https://kick.com/nicolasdebarros\n\n🎁🎁🎁🎁🎁🎁🎁🎁🎁\n\nPREMIOS EN 10 MINUTOS MAS"
+              },
+              "contextInfo": null,
+              "messageType": "conversation",
+              "messageTimestamp": 1759799913,
+              "instanceId": "750b61d7-95b4-4479-a52a-7082934cd220",
+              "source": "unknown"
+            },
+            "destination": "https://commandcentersu.app.n8n.cloud/webhook/evolution-whatsapp-media",
+            "date_time": "2025-10-06T22:18:33.787Z",
+            "sender": "551152171241@s.whatsapp.net",
+            "server_url": "https://evo.harativendas.site",
+            "apikey": "3D59118D311C-4C0B-B7D7-B7F877E8EB4D"
+          },
+          "webhookUrl": "https://commandcentersu.app.n8n.cloud/webhook/evolution-whatsapp-media",
+          "executionMode": "production"
+        }
+      }
+    ]
+  },
+  "connections": {
+    "Webhook (Evolution API)": {
+      "main": [
+        [
+          {
+            "node": "IF: Is Group?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF: Is Group?": {
+      "main": [
+        [
+          {
+            "node": "IF: Allowed Groups",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF: Allowed Groups": {
+      "main": [
+        [
+          {
+            "node": "Code: Extract Media",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code: Extract Media": {
+      "main": [
+        [
+          {
+            "node": "IF: Is Image",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "IF: Is Video",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "IF: Is Document",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF: Is Image": {
+      "main": [
+        [
+          {
+            "node": "IF: Has Base64? (Image)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF: Is Video": {
+      "main": [
+        [
+          {
+            "node": "IF: Has Base64? (Video)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF: Is Document": {
+      "main": [
+        [
+          {
+            "node": "IF: Has Base64? (Document)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF: Has Base64? (Image)": {
+      "main": [
+        [
+          {
+            "node": "Convert: Image (base64→file)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "HTTP: Download From URL",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF: Has Base64? (Video)": {
+      "main": [
+        [
+          {
+            "node": "Convert: Video (base64→file)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "HTTP: Download From URL",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF: Has Base64? (Document)": {
+      "main": [
+        [
+          {
+            "node": "Convert: Document (base64→file)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "HTTP: Download From URL",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Convert: Image (base64→file)": {
+      "main": [
+        [
+          {
+            "node": "Code: Prep Drive Meta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Convert: Video (base64→file)": {
+      "main": [
+        [
+          {
+            "node": "Code: Prep Drive Meta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Convert: Document (base64→file)": {
+      "main": [
+        [
+          {
+            "node": "Code: Prep Drive Meta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP: Download From URL": {
+      "main": [
+        [
+          {
+            "node": "Code: Prep Drive Meta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code: Prep Drive Meta": {
+      "main": [
+        [
+          {
+            "node": "Google Drive: Upload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "8b73d6a5-531d-4ab3-a16a-c4ebc88fc9d8",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "d8462d4b9be332041e5667f95cb39c4692125ff14403131b32ae4e3357603a1f"
+  },
+  "id": "GWqcCDwW4nHy4Pmr",
+  "tags": []
+}
