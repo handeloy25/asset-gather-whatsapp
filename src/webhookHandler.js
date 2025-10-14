@@ -44,17 +44,19 @@ async function processWebhook(webhookData) {
 
     // Step 1: Check if it's from a group
     if (!isGroup(webhookData)) {
-      console.log('⏭️  Not a group message, skipping');
+      const remoteJid = webhookData?.data?.key?.remoteJid || webhookData?.body?.data?.key?.remoteJid || 'unknown';
+      console.log(`⏭️  Not a group message, skipping. RemoteJid: ${remoteJid}`);
       return;
     }
 
     // Step 2: Check if it's an allowed group
+    const groupId = webhookData?.body?.data?.key?.remoteJid || '';
     if (!isAllowedGroup(webhookData)) {
-      console.log('⏭️  Not an allowed group, skipping');
+      console.log(`⏭️  Not an allowed group, skipping. Group ID: ${groupId}`);
+      console.log(`📋 Allowed groups: ${ALLOWED_GROUPS.join(', ')}`);
       return;
     }
 
-    const groupId = webhookData?.body?.data?.key?.remoteJid || '';
     console.log(`✅ Allowed group: ${groupId}`);
 
     // Step 3: Extract media information

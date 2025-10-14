@@ -23,6 +23,7 @@ app.get('/', (req, res) => {
 app.post('/webhook/evolution-whatsapp-media', async (req, res) => {
   try {
     console.log('📨 Webhook received:', new Date().toISOString());
+    console.log('📦 Payload preview:', JSON.stringify(req.body).substring(0, 500));
 
     // Acknowledge receipt immediately
     res.status(200).json({ received: true });
