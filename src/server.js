@@ -6,9 +6,9 @@ const { processWebhook } = require('./webhookHandler');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Middleware
-app.use(bodyParser.json({ limit: '50mb' }));
-app.use(bodyParser.urlencoded({ limit: '50mb', extended: true }));
+// Middleware - increased limit for large media files from WhatsApp
+app.use(bodyParser.json({ limit: '100mb' }));
+app.use(bodyParser.urlencoded({ limit: '100mb', extended: true }));
 
 // Health check endpoint
 app.get('/', (req, res) => {
